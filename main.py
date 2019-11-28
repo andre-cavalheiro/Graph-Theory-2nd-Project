@@ -1,41 +1,133 @@
 import numpy as np
 import random
 import itertools
-
+import matplotlib.pyplot as plt
 
 class evolutionIndirectReciprocitySimulation:
 
     nodes = []
     validNodeIds = []
 
-    def __init__(self, numNodes, numInteractions, initialScore=0, thresholdScore=0):
+    def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
+                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5]):
+
+        # todo - scores between -5:+5
+        # todo strategies between -5:+6 => -5=uncond cooperaters ; +6=uncond defectors
+        # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
 
         self.numNodes = numNodes
         self.numInteractions = numInteractions
+        self.numGenerations = numGenerations
+
         self.initialScore = initialScore
-        self.thresholdScore = thresholdScore
+
+        self.payoffBenefit = benefit
+        self.payoffCost = cost
+        self.strategyLimits = strategyLimits
+        self.scoreLimits = scoreLimits
+        assert(benefit > cost)
+
+        self.idIterator = 0
 
         self.initiateNodes()
 
-    def RunSimulation(self):
-        interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
+    def runSimulation(self):
+        logs = []
+        print('=====    Initiating simulation   ======')
+        for i in range(self.numGenerations):
+            print('-- Generation {} --'.format(i))
+            l = self.runGeneration()
+            logs.append(l)
 
+            # self.printPayoffs()
+            self.reproduce()
+
+            if(i==1):
+                exit()
+
+        print('== Logging ==')
+        self.logs(logs)
+
+    def runGeneration(self):
+        interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
         for pair in interactionPairs:
             self.runInteraction(pair)
-        print('== Logging ==')
-        print(self.nodes)
-        self.logs()
 
-    def initiateNodes(self):
-        for i in range(self.numNodes):
-            self.nodes.append({
-                'id': i,
-                'score': self.initialScore,
-            })
-            self.validNodeIds.append(i)
+        # print(self.nodes)
+        return {}
+
+    def runInteraction(self, pair):
+        donner = pair[0]
+        recipient = pair[1]
+        score = self.checkRecipientScore(recipient)
+
+        if score >= donner['strategy']:      # Each node has its own strategy
+            # Cooperate
+            if[donner['score'] < self.scoreLimits[1]]:
+                donner['score'] += 1
+            donner['payoff'] -= self.payoffCost
+            donner['payoff'] += self.payoffBenefit
+
+            # todo - talk with the teacher to make sure this is right
+            '''donner['score'] += 0.1
+            recipient['score'] += 0.1'''
+
+
+        else:
+            # Deflect
+            if[donner['score'] > self.scoreLimits[0]]:
+                donner['score'] -= 1
+
+
+        return
+
+    def reproduce(self):
+        print('== Raising new generation ==')
+        newNodes = []
+
+        payoffs = [node['payoff'] for node in self.nodes]
+        totalPayoff = 0
+        for p in payoffs:
+            totalPayoff += p
+
+        numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
+        print(payoffs)
+        numChilds = self.round_series_retain_integer_sum(numChilds)
+
+        for i, node in enumerate(self.nodes):
+
+            offspring = numChilds[i]
+            print('{} - {}'.format(numChilds[i], offspring))
+            # print('Reproducing {}'.format(offspring))
+            for c in range(offspring):
+                newNode = node.copy()
+                newNode['score'] = 0
+                newNode['id'] = self.idIterator
+                self.idIterator += 1
+                newNodes.append(newNode)
+            else:
+                # print('Not reproducing :( ')
+                pass
+        self.nodes = newNodes
+
+        print('Size of new generation is {}'.format(len(self.nodes)))
+        print(self.nodes)
+
+    def round_series_retain_integer_sum(self, xs):
+        N = sum(xs)
+        Rs = [round(x) for x in xs]
+        K = N - sum(Rs)
+        # assert(K == round(K))
+        fs = [x - round(x) for x in xs]
+        indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
+        ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
+        return ys
+
 
     def pickInteractionPairs(self, ids, numPairs):
         # todo - We should guarantee that each pair interacts once at most.
+        # todo - never with the same partner twice (doesnt matter if in different roles)
+
         print("> Calculating interaction pairs ")
 
         # Generate all possible non-repeating pairs
@@ -52,33 +144,65 @@ class evolutionIndirectReciprocitySimulation:
                 rand2 = random.choice(ids)
             pair = [rand1, rand2]
             pairs.append(pair)
-        print(pairs)
+        # print(pairs)
         print("- {} pairs calculated".format(len(pairs)))
         return pairs
 
-    def runInteraction(self, pair):
-        giver = pair[0]
-        receiver = pair[1]
-        score = self.checkRecipientScore(receiver)
-
-        if score >= self.thresholdScore:
-            # cooperate
-            giver['score'] += 1
-
-        else:
-            # Deflect
-            giver['score'] -= 1
-        return
-
     def checkRecipientScore(self, node):
+        # Simplest case:
         return node['score']
 
-    def logs(self):
+    def logs(self, logs):
         print('== Logging Results ==')
+        # todo
+
+    def calculateInitialScores(self):
+        initialScores = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
+        return initialScores
+
+    def initiateNodes(self):
+
+        initialScores = self.calculateInitialScores()
+
+        for i in range(self.numNodes):
+            self.nodes.append({
+                'id': self.idIterator,
+                'payoff': 0,
+                'score': self.initialScore,
+                'strategy':  initialScores[i]
+            })
+            self.idIterator += 1
+            self.validNodeIds.append(i)
+
+    def newNode(self, id, strategy):
+        pass
+
+    def printPayoffs(self):
+        for node in self.nodes:
+            print(node['payoff'])
 
 
 if __name__ == "__main__":
-    numNodes = 10
-    numInteractions = 100
-    sim = evolutionIndirectReciprocitySimulation(numNodes, numInteractions)
-    sim.RunSimulation()
+    # Original paper values:
+    originalPaperValues = {
+        'numNodes': 100,
+        'numInteractions':  125,
+        'numGenerations': 170,
+        'initialScore': 0,
+        'benefit': 1,
+        'cost': 0.1,
+        'strategyLimits': [-5, 6],
+        'scoreLimits': [-5, 5],
+    }
+
+    testValues = {
+        'numNodes': 100,
+        'numInteractions':  125,
+        'numGenerations': 10,
+        'initialScore': 0,
+        'benefit': 1,
+        'cost': 0.1
+    }
+    # sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
+    sim = evolutionIndirectReciprocitySimulation(**testValues)
+    sim.runSimulation()
