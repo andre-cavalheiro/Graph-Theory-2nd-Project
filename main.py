@@ -9,7 +9,7 @@ class evolutionIndirectReciprocitySimulation:
     validNodeIds = []
 
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
-                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5]):
+                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False):
 
         # todo - scores between -5:+5
         # todo strategies between -5:+6 => -5=uncond cooperaters ; +6=uncond defectors
@@ -41,9 +41,6 @@ class evolutionIndirectReciprocitySimulation:
 
             # self.printPayoffs()
             self.reproduce()
-
-            if(i==1):
-                exit()
 
         print('== Logging ==')
         self.logs(logs)
@@ -91,13 +88,13 @@ class evolutionIndirectReciprocitySimulation:
             totalPayoff += p
 
         numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
-        print(payoffs)
+        # print(payoffs)
         numChilds = self.round_series_retain_integer_sum(numChilds)
 
         for i, node in enumerate(self.nodes):
 
             offspring = numChilds[i]
-            print('{} - {}'.format(numChilds[i], offspring))
+            # print('{} - {}'.format(numChilds[i], offspring))
             # print('Reproducing {}'.format(offspring))
             for c in range(offspring):
                 newNode = node.copy()
@@ -111,7 +108,7 @@ class evolutionIndirectReciprocitySimulation:
         self.nodes = newNodes
 
         print('Size of new generation is {}'.format(len(self.nodes)))
-        print(self.nodes)
+        # print(self.nodes)
 
     def round_series_retain_integer_sum(self, xs):
         N = sum(xs)
@@ -122,7 +119,6 @@ class evolutionIndirectReciprocitySimulation:
         indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
         ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
         return ys
-
 
     def pickInteractionPairs(self, ids, numPairs):
         # todo - We should guarantee that each pair interacts once at most.
@@ -154,7 +150,11 @@ class evolutionIndirectReciprocitySimulation:
 
     def logs(self, logs):
         print('== Logging Results ==')
-        # todo
+        print(self.nodes)
+        strategies = [n['strategy'] for n in self.nodes]
+        plt.hist(x=strategies, bins='auto', color='#0504aa', alpha=0.7, rwidth=0.85)
+        plt.show()
+
 
     def calculateInitialScores(self):
         initialScores = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
@@ -193,6 +193,7 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
+        'mutation': False,
     }
 
     testValues = {
@@ -201,7 +202,8 @@ if __name__ == "__main__":
         'numGenerations': 10,
         'initialScore': 0,
         'benefit': 1,
-        'cost': 0.1
+        'cost': 0.1,
+        'mutation': False,
     }
     # sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
     sim = evolutionIndirectReciprocitySimulation(**testValues)
