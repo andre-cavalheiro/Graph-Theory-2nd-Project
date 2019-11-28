@@ -2,6 +2,7 @@ import numpy as np
 import random
 import itertools
 import matplotlib.pyplot as plt
+from os.path import join
 
 class evolutionIndirectReciprocitySimulation:
 
@@ -14,7 +15,7 @@ class evolutionIndirectReciprocitySimulation:
         # todo - scores between -5:+5
         # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
-
+        self.logFreq=3
         self.numNodes = numNodes
         self.numInteractions = numInteractions
         self.numGenerations = numGenerations
@@ -34,18 +35,16 @@ class evolutionIndirectReciprocitySimulation:
         self.initiateNodes()
 
     def runSimulation(self):
-        logs = []
         print('=====    Initiating simulation   ======')
         for i in range(self.numGenerations):
             print('-- Generation {} --'.format(i))
-            l = self.runGeneration()
-            logs.append(l)
+            self.runGeneration()
 
             # self.printPayoffs()
             self.reproduce()
-
-        print('== Logging ==')
-        self.logs(logs)
+            if i%self.logFreq==0:
+                print('== Logging {} =='.format(i))
+                self.logs(i)
 
     def runGeneration(self):
         interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
@@ -104,8 +103,8 @@ class evolutionIndirectReciprocitySimulation:
                 self.idIterator += 1
 
                 if self.mutation:
-                    # if self.casino(0.001):
-                    if self.casino(0.2):
+                    if self.casino(0.001):
+                    # if self.casino(0.2):
                         print('JACKPOT')
                         newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
 
@@ -156,13 +155,14 @@ class evolutionIndirectReciprocitySimulation:
         # Simplest case:
         return node['score']
 
-    def logs(self, logs):
+    def logs(self, it):
         print('== Logging Results ==')
         # print(self.nodes)
         strategies = [n['strategy'] for n in self.nodes]
-        plt.hist(x=strategies, bins=range(-5, 7), align='left', alpha=0.8, rwidth=0.85)
-        plt.xticks(range(-5,7))
-        plt.show()
+        plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
+        plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+        plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
+        plt.close()
 
     def calculateInitialScores(self):
         initialScores = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
@@ -216,6 +216,8 @@ if __name__ == "__main__":
         'cost': 0.1,
         'mutation': False,
     }
+
+    dir = 'output'
     sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
     # sim = evolutionIndirectReciprocitySimulation(**testValues)
     sim.runSimulation()
