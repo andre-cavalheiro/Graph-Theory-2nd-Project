@@ -25,6 +25,8 @@ class evolutionIndirectReciprocitySimulation:
         self.payoffCost = cost
         self.strategyLimits = strategyLimits
         self.scoreLimits = scoreLimits
+        self.mutation = mutation
+
         assert(benefit > cost)
 
         self.idIterator = 0
@@ -92,7 +94,6 @@ class evolutionIndirectReciprocitySimulation:
         numChilds = self.round_series_retain_integer_sum(numChilds)
 
         for i, node in enumerate(self.nodes):
-
             offspring = numChilds[i]
             # print('{} - {}'.format(numChilds[i], offspring))
             # print('Reproducing {}'.format(offspring))
@@ -101,6 +102,13 @@ class evolutionIndirectReciprocitySimulation:
                 newNode['score'] = 0
                 newNode['id'] = self.idIterator
                 self.idIterator += 1
+
+                if self.mutation:
+                    # if self.casino(0.001):
+                    if self.casino(0.2):
+                        print('JACKPOT')
+                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
+
                 newNodes.append(newNode)
             else:
                 # print('Not reproducing :( ')
@@ -150,11 +158,10 @@ class evolutionIndirectReciprocitySimulation:
 
     def logs(self, logs):
         print('== Logging Results ==')
-        print(self.nodes)
+        # print(self.nodes)
         strategies = [n['strategy'] for n in self.nodes]
         plt.hist(x=strategies, bins='auto', color='#0504aa', alpha=0.7, rwidth=0.85)
         plt.show()
-
 
     def calculateInitialScores(self):
         initialScores = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
@@ -181,30 +188,33 @@ class evolutionIndirectReciprocitySimulation:
         for node in self.nodes:
             print(node['payoff'])
 
+    def casino(self, percentage):
+        return (random.randrange(100) < percentage);
+
 
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
         'numNodes': 100,
         'numInteractions':  125,
-        'numGenerations': 170,
+        'numGenerations': 200,
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutation': False,
+        'mutation': True,
     }
 
     testValues = {
-        'numNodes': 100,
-        'numInteractions':  125,
+        'numNodes': 10,
+        'numInteractions':  15,
         'numGenerations': 10,
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
         'mutation': False,
     }
-    # sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
-    sim = evolutionIndirectReciprocitySimulation(**testValues)
+    sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
+    # sim = evolutionIndirectReciprocitySimulation(**testValues)
     sim.runSimulation()
