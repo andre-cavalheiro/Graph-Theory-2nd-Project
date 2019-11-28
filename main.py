@@ -12,7 +12,7 @@ class evolutionIndirectReciprocitySimulation:
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False):
 
         # todo - scores between -5:+5
-        # todo strategies between -5:+6 => -5=uncond cooperaters ; +6=uncond defectors
+        # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
 
         self.numNodes = numNodes
@@ -160,7 +160,8 @@ class evolutionIndirectReciprocitySimulation:
         print('== Logging Results ==')
         # print(self.nodes)
         strategies = [n['strategy'] for n in self.nodes]
-        plt.hist(x=strategies, bins='auto', color='#0504aa', alpha=0.7, rwidth=0.85)
+        plt.hist(x=strategies, bins=range(-5, 7), align='left', alpha=0.8, rwidth=0.85)
+        plt.xticks(range(-5,7))
         plt.show()
 
     def calculateInitialScores(self):
