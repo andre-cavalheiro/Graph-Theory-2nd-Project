@@ -10,7 +10,7 @@ class evolutionIndirectReciprocitySimulation:
     nodes = []
     validNodeIds = []
 
-    def __init__(self, logFreq, numNodes, numInteractions, numGenerations, initialScore=0,
+    def __init__(self, logFreq=3, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False):
 
         # todo - scores between -5:+5
@@ -71,13 +71,10 @@ class evolutionIndirectReciprocitySimulation:
             '''donner['score'] += 0.1
             recipient['score'] += 0.1'''
 
-
         else:
             # Deflect
             if[donner['score'] > self.scoreLimits[0]]:
                 donner['score'] -= 1
-
-
         return
 
     def reproduce(self):
