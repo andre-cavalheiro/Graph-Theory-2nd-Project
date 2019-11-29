@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import random
 import itertools
 import matplotlib.pyplot as plt
@@ -9,13 +10,13 @@ class evolutionIndirectReciprocitySimulation:
     nodes = []
     validNodeIds = []
 
-    def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
+    def __init__(self, logFreq, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False):
 
         # todo - scores between -5:+5
         # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
-        self.logFreq=3
+        self.logFreq = logFreq
         self.numNodes = numNodes
         self.numInteractions = numInteractions
         self.numGenerations = numGenerations
@@ -42,7 +43,7 @@ class evolutionIndirectReciprocitySimulation:
 
             # self.printPayoffs()
             self.reproduce()
-            if i%self.logFreq==0:
+            if i % self.logFreq==0:
                 print('== Logging {} =='.format(i))
                 self.logs(i)
 
@@ -84,14 +85,11 @@ class evolutionIndirectReciprocitySimulation:
         newNodes = []
 
         payoffs = [node['payoff'] for node in self.nodes]
-        totalPayoff = 0
-        for p in payoffs:
-            totalPayoff += p
 
+        totalPayoff=sum(payoffs)
         numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
         # print(payoffs)
         numChilds = self.round_series_retain_integer_sum(numChilds)
-
         for i, node in enumerate(self.nodes):
             offspring = numChilds[i]
             # print('{} - {}'.format(numChilds[i], offspring))
@@ -119,9 +117,10 @@ class evolutionIndirectReciprocitySimulation:
 
     def round_series_retain_integer_sum(self, xs):
         N = sum(xs)
-        Rs = [round(x) for x in xs]
-        K = N - sum(Rs)
-        # assert(K == round(K))
+        #Rs = [round(x) for x in xs]
+        Rs = [math.trunc(x) for x in xs]
+        K = int(N - sum(Rs))
+        assert(K == round(K))
         fs = [x - round(x) for x in xs]
         indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
         ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
@@ -164,20 +163,19 @@ class evolutionIndirectReciprocitySimulation:
         plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
         plt.close()
 
-    def calculateInitialScores(self):
-        initialScores = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
-        return initialScores
+    def calculateinitialStrategies(self):
+        initialStrategies = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
+        return initialStrategies
 
     def initiateNodes(self):
 
-        initialScores = self.calculateInitialScores()
-
+        initialStrategies = self.calculateinitialStrategies()
         for i in range(self.numNodes):
             self.nodes.append({
                 'id': self.idIterator,
                 'payoff': 0,
-                'score': self.initialScore,
-                'strategy':  initialScores[i]
+                'score': 0,
+                'strategy':  initialStrategies[i]
             })
             self.idIterator += 1
             self.validNodeIds.append(i)
@@ -196,6 +194,7 @@ class evolutionIndirectReciprocitySimulation:
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
+        'logFreq': 3,
         'numNodes': 100,
         'numInteractions':  125,
         'numGenerations': 200,
@@ -204,7 +203,7 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutation': True,
+        'mutation': False,
     }
 
     testValues = {
