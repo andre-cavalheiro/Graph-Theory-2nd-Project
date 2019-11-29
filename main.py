@@ -1,17 +1,17 @@
 import numpy as np
-import math
 import random
 import itertools
 import matplotlib.pyplot as plt
 from os.path import join
+import math
 
 class evolutionIndirectReciprocitySimulation:
 
     nodes = []
     validNodeIds = []
-
-    def __init__(self, logFreq=3, numNodes, numInteractions, numGenerations, initialScore=0,
-                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False):
+    
+    def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
+                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False, logFreq=3):
 
         # todo - scores between -5:+5
         # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
@@ -37,15 +37,20 @@ class evolutionIndirectReciprocitySimulation:
 
     def runSimulation(self):
         print('=====    Initiating simulation   ======')
+        perGenLogs = []
         for i in range(self.numGenerations):
             print('-- Generation {} --'.format(i))
             self.runGeneration()
 
             # self.printPayoffs()
             self.reproduce()
-            if i % self.logFreq==0:
+            if i%self.logFreq==0:
                 print('== Logging {} =='.format(i))
-                self.logs(i)
+                l = self.perGenLogs(i)
+                perGenLogs.append(l)
+
+        self.finalLogs(perGenLogs)
+        breakpoint()
 
     def runGeneration(self):
         interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
@@ -68,8 +73,8 @@ class evolutionIndirectReciprocitySimulation:
             donner['payoff'] += self.payoffBenefit
 
             # todo - talk with the teacher to make sure this is right
-            '''donner['score'] += 0.1
-            recipient['score'] += 0.1'''
+            donner['score'] += 0.1
+            recipient['score'] += 0.1
 
         else:
             # Deflect
@@ -82,11 +87,12 @@ class evolutionIndirectReciprocitySimulation:
         newNodes = []
 
         payoffs = [node['payoff'] for node in self.nodes]
+        totalPayoff = sum(payoffs)
 
-        totalPayoff=sum(payoffs)
         numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
         # print(payoffs)
         numChilds = self.round_series_retain_integer_sum(numChilds)
+
         for i, node in enumerate(self.nodes):
             offspring = numChilds[i]
             # print('{} - {}'.format(numChilds[i], offspring))
@@ -114,7 +120,7 @@ class evolutionIndirectReciprocitySimulation:
 
     def round_series_retain_integer_sum(self, xs):
         N = sum(xs)
-        #Rs = [round(x) for x in xs]
+        # Rs = [round(x) for x in xs]
         Rs = [math.trunc(x) for x in xs]
         K = int(N - sum(Rs))
         assert(K == round(K))
@@ -151,22 +157,47 @@ class evolutionIndirectReciprocitySimulation:
         # Simplest case:
         return node['score']
 
-    def logs(self, it):
+    def perGenLogs(self, it):
         print('== Logging Results ==')
+
         # print(self.nodes)
+
+        # Strategy Distribution
         strategies = [n['strategy'] for n in self.nodes]
         plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
         plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
         plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
         plt.close()
 
-    def calculateinitialStrategies(self):
+        # Average Payoff
+        payoffs = [n['payoff'] for n in self.nodes]
+        avgPayoff = sum(payoffs)/len(payoffs)
+        return {'generation': it, 'avgPayoff': avgPayoff}
+
+    def finalLogs(self, logs):
+        avgPayoff = [l['avgPayoff'] for l in logs]
+        generationIt = [l['generation'] for l in logs]
+
+        fig, ax = plt.subplots()
+        ax.plot(generationIt, avgPayoff)
+
+        # plt.ylabel(yAxes)
+        # ax.set_ylim(bottom=ymin)
+        # ax.set_ylim(top=ymax + ymax * 0.1)
+        # ax.legend()
+        # outputName = buildOutputName(x, ys, dir)
+
+        plt.savefig(join(dir, 'AvgPayoff.png'))
+        plt.close()
+
+    def calculateInitialStrategies(self):
         initialStrategies = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
         return initialStrategies
 
     def initiateNodes(self):
 
-        initialStrategies = self.calculateinitialStrategies()
+        initialStrategies = self.calculateInitialStrategies()
+
         for i in range(self.numNodes):
             self.nodes.append({
                 'id': self.idIterator,
@@ -191,7 +222,6 @@ class evolutionIndirectReciprocitySimulation:
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
-        'logFreq': 3,
         'numNodes': 100,
         'numInteractions':  125,
         'numGenerations': 200,
@@ -200,7 +230,7 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutation': False,
+        'mutation': True,
     }
 
     testValues = {
