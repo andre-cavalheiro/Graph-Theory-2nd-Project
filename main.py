@@ -48,8 +48,8 @@ class evolutionIndirectReciprocitySimulation:
                 l = self.perGenLogs(i)
                 perGenLogs.append(l)
 
-            self.reproduce()
-            #self.reproduce_Moran()
+            #self.reproduce()
+            self.reproduce_Moran()
 
         self.finalLogs(perGenLogs)
 
@@ -68,20 +68,18 @@ class evolutionIndirectReciprocitySimulation:
 
         if score >= donor['strategy']:      # Each node has its own strategy
             # Cooperate
-            if[donor['score'] < self.scoreLimits[1]]:
+            if donor['score'] < self.scoreLimits[1]:
                 donor['score'] += 1
             donor['payoff'] -= self.payoffCost
             recipient['payoff'] += self.payoffBenefit
 
         else:
             # Deflect
-            if[donor['score'] > self.scoreLimits[0]]:
+            if donor['score'] > self.scoreLimits[0]:
                 donor['score'] -= 1
 
         # todo - talk with the teacher to make sure this is right
         donor['payoff'] += 0.1
-        #recipient['score'] += 0.1
-
         return
 
     def reproduce(self):
@@ -125,13 +123,9 @@ class evolutionIndirectReciprocitySimulation:
         # print('== Moran in the House ==')
         newNodes = []
         threshold = []
-        strat = []
 
         payoffs = [node['payoff'] for node in self.nodes]
-        #totalPayoff = sum(payoffs)
-
-        #numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
-        # # print(payoffs)
+        strat = [node['strategy'] for node in self.nodes if node['payoff'] != 0]
 
         totalPayoff = 0
         for p in payoffs:
@@ -139,34 +133,29 @@ class evolutionIndirectReciprocitySimulation:
             if p > 0:
                 threshold.append(totalPayoff)
 
-        breakpoint()
+        for i , node in enumerate(self.nodes):
+            r = random.uniform(0, totalPayoff)
+            newNode = node.copy()
+            newNode['score'] = 0
+            newNode['payoff'] = 0
+            newNode['id'] = self.idIterator
+            self.idIterator += 1
+            for n in range(len(threshold)):
+                if n == 0 and r <= threshold[n]:
+                    newNode['strategy'] = strat[n]
+                elif threshold[n-1] <= r < threshold[n]:
+                    newNode['strategy'] = strat[n]
 
-        for i, node in enumerate(self.nodes):
-            offspring = numChilds[i]
-            # # print('{} - {}'.format(numChilds[i], offspring))
-            # # print('Reproducing {}'.format(offspring))
-            for c in range(offspring):
-                newNode = node.copy()
-                newNode['score'] = 0
-                newNode['payoff'] = 0
-                newNode['id'] = self.idIterator
-                self.idIterator += 1
+            if self.mutation:
+                if self.casino(0.001):
+                  # print('JACKPOT')
+                    newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
+            newNodes.append(newNode)
 
-                if self.mutation:
-                    if self.casino(0.001):
-                    # if self.casino(0.2):
-                        # print('JACKPOT')
-                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
-
-                newNodes.append(newNode)
-            else:
-                # # print('Not reproducing :( ')
-                pass
         self.nodes = newNodes
 
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
-
 
     def round_series_retain_integer_sum(self, xs):
         N = sum(xs)
@@ -186,10 +175,10 @@ class evolutionIndirectReciprocitySimulation:
         # print("> Calculating interaction pairs ")
 
         # Generate all possible non-repeating pairs
-        '''pairs = list(itertools.combinations(ids, 2))
+        pairs = list(itertools.combinations(ids, 2))
         # Randomly shuffle these pairs
         random.shuffle(pairs)
-        return pairs'''
+        return pairs
 
         pairs = []
         while len(pairs) < numPairs:
@@ -281,7 +270,7 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutation': True,
+        'mutation': False,
     }
 
     testValues = {
@@ -298,3 +287,4 @@ if __name__ == "__main__":
     sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
     # sim = evolutionIndirectReciprocitySimulation(**testValues)
     sim.runSimulation()
+
