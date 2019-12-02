@@ -4,6 +4,7 @@ import itertools
 import matplotlib.pyplot as plt
 from os.path import join
 import math
+from collections import Counter
 
 class evolutionIndirectReciprocitySimulation:
 
@@ -41,15 +42,16 @@ class evolutionIndirectReciprocitySimulation:
         for i in range(self.numGenerations):
             # print('-- Generation {} --'.format(i))
             self.runGeneration()
-
             # self.printPayoffs()
             if i%self.logFreq==0:
                 # print('== Logging {} =='.format(i))
+
                 l = self.perGenLogs(i)
                 perGenLogs.append(l)
 
             #self.reproduce()
             self.reproduce_Moran()
+            #self.reproduce_Social()
 
         self.finalLogs(perGenLogs)
 
@@ -119,6 +121,17 @@ class evolutionIndirectReciprocitySimulation:
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
 
+    def round_series_retain_integer_sum(self, xs):
+        N = sum(xs)
+        # Rs = [round(x) for x in xs]
+        Rs = [math.trunc(x) for x in xs]
+        K = int(N - sum(Rs))
+        assert(K == round(K))
+        fs = [x - round(x) for x in xs]
+        indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
+        ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
+        return ys
+
     def reproduce_Moran(self):
         # print('== Moran in the House ==')
         newNodes = []
@@ -145,40 +158,29 @@ class evolutionIndirectReciprocitySimulation:
                     newNode['strategy'] = strat[n]
                 elif threshold[n-1] <= r < threshold[n]:
                     newNode['strategy'] = strat[n]
-
             if self.mutation:
                 if self.casino(0.001):
                   # print('JACKPOT')
                     newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
             newNodes.append(newNode)
-
         self.nodes = newNodes
 
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
 
-    def round_series_retain_integer_sum(self, xs):
-        N = sum(xs)
-        # Rs = [round(x) for x in xs]
-        Rs = [math.trunc(x) for x in xs]
-        K = int(N - sum(Rs))
-        assert(K == round(K))
-        fs = [x - round(x) for x in xs]
-        indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
-        ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
-        return ys
+    def reproduce_Social(self):
+        pass
 
     def pickInteractionPairs(self, ids, numPairs):
         # todo - We should guarantee that each pair interacts once at most.
         # todo - never with the same partner twice (doesnt matter if in different roles)
-
         # print("> Calculating interaction pairs ")
 
         # Generate all possible non-repeating pairs
-        pairs = list(itertools.combinations(ids, 2))
+        #pairs = list(itertools.combinations(ids, 2))
         # Randomly shuffle these pairs
-        random.shuffle(pairs)
-        return pairs
+        #random.shuffle(pairs)
+        #return pairs
 
         pairs = []
         while len(pairs) < numPairs:
@@ -190,6 +192,8 @@ class evolutionIndirectReciprocitySimulation:
             pairs.append(pair)
         # # print(pairs)
         # print("- {} pairs calculated".format(len(pairs)))
+        #random.shuffle(pairs)
+
         return pairs
 
     def checkRecipientScore(self, node):
@@ -257,14 +261,13 @@ class evolutionIndirectReciprocitySimulation:
     def casino(self, percentage):
         return (random.random() < percentage);
 
-
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
         'logFreq': 1,
         'numNodes': 100,
-        'numInteractions':  125,
-        'numGenerations': 200,
+        'numInteractions':  500,
+        'numGenerations': 1000,
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
