@@ -1,17 +1,18 @@
 import numpy as np
-import random
 import itertools
+import random
 import matplotlib.pyplot as plt
 from os.path import join
 import math
+from copy import deepcopy
 
 class evolutionIndirectReciprocitySimulation:
 
     nodes = []
-    validNodeIds = []
 
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
-                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutation=False, logFreq=3):
+                 benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
+                 mutationNonPublicScores=False, logFreq=3, numObservers=10):
 
         # todo - scores between -5:+5
         # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
@@ -27,11 +28,14 @@ class evolutionIndirectReciprocitySimulation:
         self.payoffCost = cost
         self.strategyLimits = strategyLimits
         self.scoreLimits = scoreLimits
-        self.mutation = mutation
+        self.mutationRebelChild = mutationRebelChild
+        self.mutationNonPublicScores = mutationNonPublicScores
+        self.numObservers = numObservers
 
         assert(benefit > cost)
 
         self.idIterator = 0
+        self.idToIndex = {}     # id:index
 
         self.initiateNodes()
 
@@ -43,14 +47,14 @@ class evolutionIndirectReciprocitySimulation:
             self.runGeneration()
 
             # self.printPayoffs()
-            self.reproduce()
             if i%self.logFreq==0:
                 print('== Logging {} =='.format(i))
                 l = self.perGenLogs(i)
                 perGenLogs.append(l)
 
+            self.reproduce()
+
         self.finalLogs(perGenLogs)
-        breakpoint()
 
     def runGeneration(self):
         interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
@@ -61,31 +65,77 @@ class evolutionIndirectReciprocitySimulation:
         return {}
 
     def runInteraction(self, pair):
-        donner = pair[0]
+        donor = pair[0]
         recipient = pair[1]
-        score = self.checkRecipientScore(recipient)
+        score = self.checkRecipientScore(donor, recipient)
 
-        if score >= donner['strategy']:      # Each node has its own strategy
+        if score >= donor['strategy']:      # Each node has its own strategy
             # Cooperate
-            if[donner['score'] < self.scoreLimits[1]]:
-                donner['score'] += 1
-            donner['payoff'] -= self.payoffCost
-            donner['payoff'] += self.payoffBenefit
+            self.updateScoreAndPayoff(donor, recipient, 'cooperate')
 
             # todo - talk with the teacher to make sure this is right
-            donner['score'] += 0.1
-            recipient['score'] += 0.1
-
-
         else:
             # Deflect
-            if[donner['score'] > self.scoreLimits[0]]:
-                donner['score'] -= 1
+            self.updateScoreAndPayoff(donor, recipient, 'deflect')
+
+        donor['payoff'] += 0.1
+        recipient['payoff'] += 0.1   # I think this shouldn't be
         return
+
+    def updateScoreAndPayoff(self, donor, recipient, action):
+        if self.mutationNonPublicScores:
+            if action == 'cooperate':
+                # Change random observer's views of the donor + the recipient
+                possibleObservers = self.nodes.copy()
+                possibleObservers.remove(donor)
+                possibleObservers.remove(recipient)
+                observers = random.sample(possibleObservers, self.numObservers)
+                observers.append(recipient)
+                for obs in observers:
+                    for nodeScores in self.nodes[self.idToIndex[obs['id']]]['otherScoresForMe']:
+                        if nodeScores['id'] == donor['id']:
+                            nodeScores['score'] += 1
+
+                donor['payoff'] -= self.payoffCost
+                recipient['payoff'] += self.payoffBenefit
+
+            elif action == 'deflect':
+                # Change random observer's views of the donor
+                possibleObservers = self.nodes.copy()
+                possibleObservers.remove(donor)
+                possibleObservers.remove(recipient)
+                observers = random.sample(possibleObservers, self.numObservers)
+                observers.append(recipient)
+                for obs in observers:
+                    for nodeScores in self.nodes[self.idToIndex[obs['id']]]['otherScoresForMe']:
+                        if nodeScores['id'] == donor['id']:
+                            nodeScores['score']-=1
+
+            else:
+                print('Something is very wrong here unkown action !!!!')
+                print('Something is very wrong here unkown action !!!!')
+
+            u=1
+        else:
+            if action == 'cooperate':
+                if donor['score'] < self.scoreLimits[1]:
+                    donor['score'] += 1
+
+                donor['payoff'] -= self.payoffCost
+                recipient['payoff'] += self.payoffBenefit
+
+            elif action == 'deflect':
+                if donor['score'] > self.scoreLimits[0]:
+                    donor['score'] -= 1
+                # Payoff does not change
+            else:
+                print('Something is very wrong here unkown action !!!!')
+                print('Something is very wrong here unkown action !!!!')
 
     def reproduce(self):
         print('== Raising new generation ==')
         newNodes = []
+        self.idToIndex = {}
 
         payoffs = [node['payoff'] for node in self.nodes]
         totalPayoff = sum(payoffs)
@@ -100,20 +150,30 @@ class evolutionIndirectReciprocitySimulation:
             # print('Reproducing {}'.format(offspring))
             for c in range(offspring):
                 newNode = node.copy()
-                newNode['score'] = 0
-                newNode['id'] = self.idIterator
-                self.idIterator += 1
 
-                if self.mutation:
+                if self.mutationRebelChild:
                     if self.casino(0.001):
-                    # if self.casino(0.2):
+                        # if self.casino(0.2):
                         print('JACKPOT')
-                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
+                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
 
+                newNode['payoff'] = 0
+                newNode['id'] = self.idIterator
                 newNodes.append(newNode)
+
+                self.idToIndex[self.idIterator] = len(newNodes)-1
+                self.idIterator += 1
             else:
                 # print('Not reproducing :( ')
                 pass
+
+        # Set initial scores
+        for node in newNodes:
+            if self.mutationNonPublicScores:
+                node['otherScoresForMe'] = [{'score': 0, 'id': i['id']} for i in newNodes if i['id'] != node['id']]
+            else:
+                node['score'] = 0
+
         self.nodes = newNodes
 
         print('Size of new generation is {}'.format(len(self.nodes)))
@@ -138,7 +198,7 @@ class evolutionIndirectReciprocitySimulation:
 
         # Generate all possible non-repeating pairs
         '''pairs = list(itertools.combinations(ids, 2))
-        # Randomly shuffle these pairs
+        # Randomly shuffle these pairs                                
         random.shuffle(pairs)
         return pairs'''
 
@@ -154,9 +214,24 @@ class evolutionIndirectReciprocitySimulation:
         print("- {} pairs calculated".format(len(pairs)))
         return pairs
 
-    def checkRecipientScore(self, node):
-        # Simplest case:
-        return node['score']
+    def checkRecipientScore(self, donor, recipient):
+        if self.mutationNonPublicScores:
+            recipientScore = None
+            for d in donor['otherScoresForMe']:
+                if d['id']==recipient['id']:
+                    recipientScore = d['score']
+
+            if recipientScore == None:
+                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
+                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
+                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
+                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
+                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
+                exit()
+            return recipientScore
+        else:
+            # Simplest case:
+            return recipient['score']
 
     def perGenLogs(self, it):
         print('== Logging Results ==')
@@ -199,15 +274,31 @@ class evolutionIndirectReciprocitySimulation:
 
         initialStrategies = self.calculateInitialStrategies()
 
-        for i in range(self.numNodes):
-            self.nodes.append({
-                'id': self.idIterator,
-                'payoff': 0,
-                'score': 0,
-                'strategy':  initialStrategies[i]
-            })
-            self.idIterator += 1
-            self.validNodeIds.append(i)
+        if self.mutationNonPublicScores:
+            for i in range(self.numNodes):
+                self.nodes.append({
+                    'id': self.idIterator,
+                    'payoff': 0,
+                    'strategy': initialStrategies[i]
+                })
+                self.idToIndex[self.idIterator] = len(self.nodes)-1
+                self.idIterator += 1
+
+            for node in self.nodes:
+                node['otherScoresForMe'] = [{'score': 0, 'id': i['id']} for i in self.nodes if i['id']!=node['id']]
+
+        else:
+            for i in range(self.numNodes):
+                self.nodes.append({
+                    'id': self.idIterator,
+                    'payoff': 0,
+                    'score': 0,
+                    'strategy': initialStrategies[i]
+                })
+                self.idToIndex[self.idIterator] = len(self.nodes)-1
+                self.idIterator += 1
+
+        return
 
     def newNode(self, id, strategy):
         pass
@@ -231,7 +322,8 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutation': True,
+        'mutationRebelChild': True,
+        'mutationNonPublicScores': True
     }
 
     testValues = {
@@ -241,7 +333,8 @@ if __name__ == "__main__":
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
-        'mutation': False,
+        'mutationRebelChild': False,
+        'mutationNonPublicScores': True
     }
 
     dir = 'output'
