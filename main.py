@@ -14,7 +14,7 @@ class evolutionIndirectReciprocitySimulation:
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
                  mutationNonPublicScores=False, mutationMyScoreMatters=False, logFreq=3, numObservers=10,
-                 mutationMyScoreMattersStrategy=None):
+                 mutationMyScoreMattersStrategy=None, reproduce='normal'):
 
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
@@ -33,6 +33,7 @@ class evolutionIndirectReciprocitySimulation:
         self.mutationMyScoreMatters = mutationMyScoreMatters
         self.mutationMyScoreMattersStrategy = mutationMyScoreMattersStrategy
         self.numObservers = numObservers
+        self.reproduceMethod = reproduce
 
         assert(benefit > cost)
         assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))    # Can't both be on
@@ -55,10 +56,15 @@ class evolutionIndirectReciprocitySimulation:
 
                 l = self.perGenLogs(i)
                 perGenLogs.append(l)
-
-            self.reproduce()
-            # self.reproduce_Moran()
-            #self.reproduce_Social()
+            if self.reproduceMethod == 'normal':
+                self.reproduce()
+            elif self.reproduceMethod == 'moran':
+                self.reproduce_Moran()
+            elif self.reproduceMethod == 'social':
+                self.reproduce_Social()
+            else:
+                print('Wrong reproduce method, check original values')
+                exit()
 
         self.finalLogs(perGenLogs)
 
@@ -241,7 +247,7 @@ class evolutionIndirectReciprocitySimulation:
                     newNode['strategy'] = strat[n]
                 elif threshold[n-1] <= r < threshold[n]:
                     newNode['strategy'] = strat[n]
-            if self.mutation:
+            if self.mutationRebelChild:
                 if self.casino(0.001):
                   # print('JACKPOT')
                     newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
@@ -251,8 +257,29 @@ class evolutionIndirectReciprocitySimulation:
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
 
-    def reproduce_Social(self):
-        pass
+    def reproduce_Social(self): # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
+        interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
+        beta = 10
+        for pair in interactionPairs:
+            mine = pair[0]
+            partner = pair[1]
+            if partner['payoff'] > mine['payoff']:
+                prob = 1/(1+math.exp(-beta * (partner['payoff'] - mine['payoff'])))
+                if self.casino(prob):
+                    mine['strategy'] = partner['strategy']
+        self.reset_scores()
+
+    def reset_scores(self):
+        newNodes=[]
+        for i , node in enumerate(self.nodes):
+            newNode = node.copy()
+            newNode['score'] = 0
+            newNode['payoff'] = 0
+            newNode['id'] = self.idIterator
+            self.idIterator += 1
+            newNodes.append(newNode)
+
+        self.nodes = newNodes
 
     def pickInteractionPairs(self, ids, numPairs):
         # todo - We should guarantee that each pair interacts once at most.
@@ -304,8 +331,7 @@ class evolutionIndirectReciprocitySimulation:
         # # print(self.nodes)
 
         # Strategy Distribution
-        if self.mutationMyScoreMattersStrategy:
-
+        if self.mutationMyScoreMatters:
             vals = list(range(self.strategyLimits[0], self.strategyLimits[1]+1))
             indexes = {val:it for it, val in enumerate(vals)}
             freq = [[0 for _ in vals] for _ in vals]
@@ -417,7 +443,7 @@ if __name__ == "__main__":
     originalPaperValues = {
         'logFreq': 50,
         'numNodes': 100,
-        'numInteractions':  500,
+        'numInteractions':  250,
         'numGenerations': 1000,
         'initialScore': 0,
         'benefit': 1,
@@ -428,6 +454,7 @@ if __name__ == "__main__":
         'mutationNonPublicScores': False,
         'mutationMyScoreMatters': False,
         'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
+        'reproduce': 'social', # 'normal', 'moran' or 'social'
     }
 
     dir = 'output'
