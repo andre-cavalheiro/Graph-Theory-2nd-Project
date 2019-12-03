@@ -1,10 +1,10 @@
 import numpy as np
 import itertools
+from copy import deepcopy
 import random
 import matplotlib.pyplot as plt
 from os.path import join
 import math
-from copy import deepcopy
 
 class evolutionIndirectReciprocitySimulation:
 
@@ -12,10 +12,9 @@ class evolutionIndirectReciprocitySimulation:
 
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
-                 mutationNonPublicScores=False, logFreq=3, numObservers=10):
+                 mutationNonPublicScores=False, mutationMyScoreMatters=False, logFreq=3, numObservers=10,
+                 mutationMyScoreMattersStrategy=None):
 
-        # todo - scores between -5:+5
-        # todo strategies between -5:+6 => -5=uncond cooperators ; +6=uncond defectors
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
         self.numNodes = numNodes
@@ -30,13 +29,17 @@ class evolutionIndirectReciprocitySimulation:
         self.scoreLimits = scoreLimits
         self.mutationRebelChild = mutationRebelChild
         self.mutationNonPublicScores = mutationNonPublicScores
+        self.mutationMyScoreMatters = mutationMyScoreMatters
+        self.mutationMyScoreMattersStrategy = mutationMyScoreMattersStrategy
         self.numObservers = numObservers
 
         assert(benefit > cost)
+        assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))    # Can't both be on
+        if mutationMyScoreMatters:
+            assert (mutationMyScoreMattersStrategy is not None)
 
         self.idIterator = 0
         self.idToIndex = {}     # id:index
-
         self.initiateNodes()
 
     def runSimulation(self):
@@ -49,11 +52,11 @@ class evolutionIndirectReciprocitySimulation:
             # self.printPayoffs()
             if i%self.logFreq==0:
                 print('== Logging {} =='.format(i))
+                # Print strategy distribution (if mutation my score matters that's represented my a scatter plot)
                 l = self.perGenLogs(i)
                 perGenLogs.append(l)
-
             self.reproduce()
-
+            # self.reproduce_Moran()
         self.finalLogs(perGenLogs)
 
     def runGeneration(self):
@@ -61,7 +64,7 @@ class evolutionIndirectReciprocitySimulation:
         for pair in interactionPairs:
             self.runInteraction(pair)
 
-        # print(self.nodes)
+        # # print(self.nodes)
         return {}
 
     def runInteraction(self, pair):
@@ -69,18 +72,37 @@ class evolutionIndirectReciprocitySimulation:
         recipient = pair[1]
         score = self.checkRecipientScore(donor, recipient)
 
-        if score >= donor['strategy']:      # Each node has its own strategy
-            # Cooperate
-            self.updateScoreAndPayoff(donor, recipient, 'cooperate')
-
-            # todo - talk with the teacher to make sure this is right
+        if self.mutationMyScoreMatters:
+            action = self.myScoreMattersInteraction(donor, score)
         else:
-            # Deflect
-            self.updateScoreAndPayoff(donor, recipient, 'deflect')
+            if score >= donor['strategy']:      # Each node has its own strategy
+                # Cooperate
+                action = 'cooperate'
+            else:
+                # Deflect
+                action = 'deflect'
 
+        self.updateScoreAndPayoff(donor, recipient, action)
         donor['payoff'] += 0.1
-        recipient['payoff'] += 0.1   # I think this shouldn't be
         return
+
+    def myScoreMattersInteraction(self, donor, recipientScore):
+        firstCond = recipientScore > donor['strategy']      # In the paper they don't say "or equal to"
+        secondCond = donor['score'] < donor['strategySelf'] # In the paper they don't say "or equal to"
+
+        if self.mutationMyScoreMattersStrategy == 'and':
+            if firstCond and secondCond:
+                return 'cooperate'
+            else:
+                return 'deflect'
+        elif self.mutationMyScoreMattersStrategy == 'or':
+            if firstCond or secondCond:
+                return 'cooperate'
+            else:
+                return 'deflect'
+        else:
+            print('Unknown strategy for mutation: "My score matters" - exiting')
+            exit(-1)
 
     def updateScoreAndPayoff(self, donor, recipient, action):
         if self.mutationNonPublicScores:
@@ -115,7 +137,6 @@ class evolutionIndirectReciprocitySimulation:
                 print('Something is very wrong here unkown action !!!!')
                 print('Something is very wrong here unkown action !!!!')
 
-            u=1
         else:
             if action == 'cooperate':
                 if donor['score'] < self.scoreLimits[1]:
@@ -141,30 +162,31 @@ class evolutionIndirectReciprocitySimulation:
         totalPayoff = sum(payoffs)
 
         numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
-        # print(payoffs)
+        # # print(payoffs)
         numChilds = self.round_series_retain_integer_sum(numChilds)
 
         for i, node in enumerate(self.nodes):
             offspring = numChilds[i]
-            # print('{} - {}'.format(numChilds[i], offspring))
-            # print('Reproducing {}'.format(offspring))
+            # # print('{} - {}'.format(numChilds[i], offspring))
+            # # print('Reproducing {}'.format(offspring))
             for c in range(offspring):
                 newNode = node.copy()
-
-                if self.mutationRebelChild:
-                    if self.casino(0.001):
-                        # if self.casino(0.2):
-                        print('JACKPOT')
-                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
-
+                newNode['score'] = 0
                 newNode['payoff'] = 0
                 newNode['id'] = self.idIterator
+
+                if self.mutationRebelChild:     # fixme - should also change h for mutation: 'my score matters'
+                    if self.casino(0.001):
+                    # if self.casino(0.2):
+                        print('JACKPOT')
+                        newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
+
                 newNodes.append(newNode)
 
                 self.idToIndex[self.idIterator] = len(newNodes)-1
                 self.idIterator += 1
             else:
-                # print('Not reproducing :( ')
+                # # print('Not reproducing :( ')
                 pass
 
         # Set initial scores
@@ -176,8 +198,46 @@ class evolutionIndirectReciprocitySimulation:
 
         self.nodes = newNodes
 
-        print('Size of new generation is {}'.format(len(self.nodes)))
-        # print(self.nodes)
+        # print('Size of new generation is {}'.format(len(self.nodes)))
+        # # print(self.nodes)
+
+    def reproduce_Moran(self):
+        # print('== Moran in the House ==')
+        newNodes = []
+        threshold = []
+
+        payoffs = [node['payoff'] for node in self.nodes]
+        strat = [node['strategy'] for node in self.nodes if node['payoff'] != 0]
+
+        totalPayoff = 0
+        for p in payoffs:
+            totalPayoff += p
+            if p > 0:
+                threshold.append(totalPayoff)
+
+        for i , node in enumerate(self.nodes):
+            r = random.uniform(0, totalPayoff)
+            newNode = node.copy()
+            newNode['score'] = 0
+            newNode['payoff'] = 0
+            newNode['id'] = self.idIterator
+            self.idIterator += 1
+            for n in range(len(threshold)):
+                if n == 0 and r <= threshold[n]:
+                    newNode['strategy'] = strat[n]
+                elif threshold[n-1] <= r < threshold[n]:
+                    newNode['strategy'] = strat[n]
+
+            if self.mutation:
+                if self.casino(0.001):
+                  # print('JACKPOT')
+                    newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
+            newNodes.append(newNode)
+
+        self.nodes = newNodes
+
+        # print('Size of new generation is {}'.format(len(self.nodes)))
+        # # print(self.nodes)
 
     def round_series_retain_integer_sum(self, xs):
         N = sum(xs)
@@ -194,7 +254,7 @@ class evolutionIndirectReciprocitySimulation:
         # todo - We should guarantee that each pair interacts once at most.
         # todo - never with the same partner twice (doesnt matter if in different roles)
 
-        print("> Calculating interaction pairs ")
+        # print("> Calculating interaction pairs ")
 
         # Generate all possible non-repeating pairs
         '''pairs = list(itertools.combinations(ids, 2))
@@ -210,8 +270,10 @@ class evolutionIndirectReciprocitySimulation:
                 rand2 = random.choice(ids)
             pair = [rand1, rand2]
             pairs.append(pair)
-        # print(pairs)
-        print("- {} pairs calculated".format(len(pairs)))
+        # # print(pairs)
+        # print("- {} pairs calculated".format(len(pairs)))
+        random.shuffle(pairs)
+
         return pairs
 
     def checkRecipientScore(self, donor, recipient):
@@ -234,20 +296,46 @@ class evolutionIndirectReciprocitySimulation:
             return recipient['score']
 
     def perGenLogs(self, it):
-        print('== Logging Results ==')
+        # print('== Logging Results ==')
 
-        # print(self.nodes)
+        # # print(self.nodes)
 
         # Strategy Distribution
-        strategies = [n['strategy'] for n in self.nodes]
-        plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
-        plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
-        plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
-        plt.close()
+        if self.mutationMyScoreMattersStrategy:
+
+            vals = list(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+            indexes = {val:it for it, val in enumerate(vals)}
+            freq = [[0 for _ in vals] for _ in vals]
+
+            for node in self.nodes:
+                k = node['strategy']
+                h = node['strategySelf']
+                freq[indexes[k]][indexes[h]]+=1
+
+            x, y, z = [], [], []
+            for k in vals:
+                for h in vals:
+                    x.append(k)
+                    y.append(h)
+                    z.append(freq[indexes[k]][indexes[h]])
+
+            scaleSizes = [i*10 for i in z]
+            plt.scatter(x, y, s=scaleSizes, c="blue", alpha=0.4)
+            plt.grid()
+            plt.savefig(join(dir, 'strategyDistributionScatter - {}'.format(it)))
+            plt.close()
+
+        else:
+            strategies = [n['strategy'] for n in self.nodes]
+            plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
+            plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+            plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
+            plt.close()
 
         # Average Payoff
         payoffs = [n['payoff'] for n in self.nodes]
         avgPayoff = sum(payoffs)/len(payoffs)
+
         return {'generation': it, 'avgPayoff': avgPayoff}
 
     def finalLogs(self, logs):
@@ -287,6 +375,20 @@ class evolutionIndirectReciprocitySimulation:
             for node in self.nodes:
                 node['otherScoresForMe'] = [{'score': 0, 'id': i['id']} for i in self.nodes if i['id']!=node['id']]
 
+        elif self.mutationMyScoreMatters:
+            initialSelfStrategies = self.calculateInitialStrategies()
+
+            for i in range(self.numNodes):
+                self.nodes.append({
+                    'id': self.idIterator,
+                    'payoff': 0,
+                    'score': 0,
+                    'strategy': initialStrategies[i],
+                    'strategySelf': initialSelfStrategies[i],
+                })
+                self.idToIndex[self.idIterator] = len(self.nodes) - 1
+                self.idIterator += 1
+
         else:
             for i in range(self.numNodes):
                 self.nodes.append({
@@ -308,12 +410,13 @@ class evolutionIndirectReciprocitySimulation:
             print(node['payoff'])
 
     def casino(self, percentage):
-        return (random.randrange(100) < percentage);
+        return (random.random() < percentage);
 
 
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
+        'logFreq': 50,
         'numNodes': 100,
         'numInteractions':  125,
         'numGenerations': 200,
@@ -322,11 +425,14 @@ if __name__ == "__main__":
         'cost': 0.1,
         'strategyLimits': [-5, 6],
         'scoreLimits': [-5, 5],
-        'mutationRebelChild': True,
-        'mutationNonPublicScores': True
+        'mutationRebelChild': False,
+        'mutationNonPublicScores': False,
+        'mutationMyScoreMatters': True,
+        'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
     }
 
     testValues = {
+        'logFreq': 50,
         'numNodes': 10,
         'numInteractions':  15,
         'numGenerations': 10,
@@ -334,10 +440,13 @@ if __name__ == "__main__":
         'benefit': 1,
         'cost': 0.1,
         'mutationRebelChild': False,
-        'mutationNonPublicScores': True
+        'mutationNonPublicScores': False,
+        'mutationMyScoreMatters': False,
+        'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
     }
 
     dir = 'output'
     sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
     # sim = evolutionIndirectReciprocitySimulation(**testValues)
     sim.runSimulation()
+
