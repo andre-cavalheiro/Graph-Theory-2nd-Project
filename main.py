@@ -1,11 +1,10 @@
 import numpy as np
 import itertools
 from copy import deepcopy
+from utils import *
 import random
 import matplotlib.pyplot as plt
 from os.path import join
-import math
-from collections import Counter
 
 class evolutionIndirectReciprocitySimulation:
 
@@ -49,7 +48,6 @@ class evolutionIndirectReciprocitySimulation:
         for i in range(self.numGenerations):
             print('-- Generation {} --'.format(i))
             self.runGeneration()
-            # self.printPayoffs()
             if i%self.logFreq==0:
                 # print('== Logging {} =='.format(i))
 
@@ -60,10 +58,10 @@ class evolutionIndirectReciprocitySimulation:
             # self.reproduce_Moran()
             #self.reproduce_Social()
 
-        self.finalLogs(perGenLogs)
+        finalLogs(perGenLogs)
 
     def runGeneration(self):
-        interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
+        interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
         for pair in interactionPairs:
             self.runInteraction(pair)
 
@@ -166,7 +164,7 @@ class evolutionIndirectReciprocitySimulation:
 
         numChilds = [p*self.numNodes/totalPayoff for p in payoffs]
         # # print(payoffs)
-        numChilds = self.round_series_retain_integer_sum(numChilds)
+        numChilds = round_series_retain_integer_sum(numChilds)
 
         for i, node in enumerate(self.nodes):
             offspring = numChilds[i]
@@ -179,8 +177,8 @@ class evolutionIndirectReciprocitySimulation:
                 newNode['id'] = self.idIterator
 
                 if self.mutationRebelChild:     # fixme - should also change h for mutation: 'my score matters'
-                    if self.casino(0.001):
-                    # if self.casino(0.2):
+                    if casino(0.001):
+                    # if casino(0.2):
                         print('JACKPOT')
                         newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
 
@@ -203,17 +201,6 @@ class evolutionIndirectReciprocitySimulation:
 
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
-
-    def round_series_retain_integer_sum(self, xs):
-        N = sum(xs)
-        # Rs = [round(x) for x in xs]
-        Rs = [math.trunc(x) for x in xs]
-        K = int(N - sum(Rs))
-        assert(K == round(K))
-        fs = [x - round(x) for x in xs]
-        indices = [i for order, (e, i) in enumerate(reversed(sorted((e, i) for i, e in enumerate(fs)))) if order < K]
-        ys = [R + 1 if i in indices else R for i, R in enumerate(Rs)]
-        return ys
 
     def reproduce_Moran(self):
         # print('== Moran in the House ==')
@@ -242,7 +229,7 @@ class evolutionIndirectReciprocitySimulation:
                 elif threshold[n-1] <= r < threshold[n]:
                     newNode['strategy'] = strat[n]
             if self.mutation:
-                if self.casino(0.001):
+                if casino(0.001):
                   # print('JACKPOT')
                     newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
             newNodes.append(newNode)
@@ -254,31 +241,6 @@ class evolutionIndirectReciprocitySimulation:
     def reproduce_Social(self):
         pass
 
-    def pickInteractionPairs(self, ids, numPairs):
-        # todo - We should guarantee that each pair interacts once at most.
-        # todo - never with the same partner twice (doesnt matter if in different roles)
-        # print("> Calculating interaction pairs ")
-
-        # Generate all possible non-repeating pairs
-        '''pairs = list(itertools.combinations(ids, 2))
-        # Randomly shuffle these pairs                                
-        random.shuffle(pairs)
-        return pairs'''
-
-        pairs = []
-        while len(pairs) < numPairs:
-            rand1 = random.choice(ids)
-            rand2 = rand1
-            while rand2["id"] == rand1["id"]:
-                rand2 = random.choice(ids)
-            pair = [rand1, rand2]
-            pairs.append(pair)
-        # # print(pairs)
-        # print("- {} pairs calculated".format(len(pairs)))
-        random.shuffle(pairs)
-
-        return pairs
-
     def checkRecipientScore(self, donor, recipient):
         if self.mutationNonPublicScores:
             recipientScore = None
@@ -287,10 +249,6 @@ class evolutionIndirectReciprocitySimulation:
                     recipientScore = d['score']
 
             if recipientScore == None:
-                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
-                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
-                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
-                print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
                 print('SOMETHING IS WRONG HERE THIS SHOULD NOT HAPPEN')
                 exit()
             return recipientScore
@@ -304,7 +262,7 @@ class evolutionIndirectReciprocitySimulation:
         # # print(self.nodes)
 
         # Strategy Distribution
-        if self.mutationMyScoreMattersStrategy:
+        if self.mutationMyScoreMatters:
 
             vals = list(range(self.strategyLimits[0], self.strategyLimits[1]+1))
             indexes = {val:it for it, val in enumerate(vals)}
@@ -340,22 +298,6 @@ class evolutionIndirectReciprocitySimulation:
         avgPayoff = sum(payoffs)/len(payoffs)
 
         return {'generation': it, 'avgPayoff': avgPayoff}
-
-    def finalLogs(self, logs):
-        avgPayoff = [l['avgPayoff'] for l in logs]
-        generationIt = [l['generation'] for l in logs]
-
-        fig, ax = plt.subplots()
-        ax.plot(generationIt, avgPayoff)
-
-        # plt.ylabel(yAxes)
-        # ax.set_ylim(bottom=ymin)
-        # ax.set_ylim(top=ymax + ymax * 0.1)
-        # ax.legend()
-        # outputName = buildOutputName(x, ys, dir)
-
-        plt.savefig(join(dir, 'AvgPayoff.png'))
-        plt.close()
 
     def calculateInitialStrategies(self):
         initialStrategies = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
@@ -405,12 +347,6 @@ class evolutionIndirectReciprocitySimulation:
 
         return
 
-    def printPayoffs(self):
-        for node in self.nodes:
-            print(node['payoff'])
-
-    def casino(self, percentage):
-        return (random.random() < percentage);
 
 if __name__ == "__main__":
     # Original paper values:
