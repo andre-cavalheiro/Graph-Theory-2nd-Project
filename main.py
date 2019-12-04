@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 from os.path import join
 import math
 from collections import Counter
-
+import os
+import time
+import json
 class evolutionIndirectReciprocitySimulation:
 
     nodes = []
@@ -14,7 +16,7 @@ class evolutionIndirectReciprocitySimulation:
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
                  mutationNonPublicScores=False, mutationMyScoreMatters=False, logFreq=3, numObservers=10,
-                 mutationMyScoreMattersStrategy=None, reproduce='normal'):
+                 mutationMyScoreMattersStrategy=None, reproduce='normal', saveOnlyFinalLogs=True):
 
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
@@ -34,6 +36,8 @@ class evolutionIndirectReciprocitySimulation:
         self.mutationMyScoreMattersStrategy = mutationMyScoreMattersStrategy
         self.numObservers = numObservers
         self.reproduceMethod = reproduce
+
+        self.saveOnlyFinalLogs = saveOnlyFinalLogs
 
         assert(benefit > cost)
         assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))    # Can't both be on
@@ -186,12 +190,10 @@ class evolutionIndirectReciprocitySimulation:
 
                 if self.mutationRebelChild:     # fixme - should also change h for mutation: 'my score matters'
                     if self.casino(0.001):
-                    # if self.casino(0.2):
                         print('JACKPOT')
                         newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1)
 
                 newNodes.append(newNode)
-
                 self.idToIndex[self.idIterator] = len(newNodes)-1
                 self.idIterator += 1
             else:
@@ -241,7 +243,6 @@ class evolutionIndirectReciprocitySimulation:
             newNode['score'] = 0
             newNode['payoff'] = 0
             newNode['id'] = self.idIterator
-            self.idIterator += 1
             for n in range(len(threshold)):
                 if n == 0 and r <= threshold[n]:
                     newNode['strategy'] = strat[n]
@@ -249,9 +250,18 @@ class evolutionIndirectReciprocitySimulation:
                     newNode['strategy'] = strat[n]
             if self.mutationRebelChild:
                 if self.casino(0.001):
-                  # print('JACKPOT')
+                    print('JACKPOT')
                     newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
             newNodes.append(newNode)
+            self.idToIndex[self.idIterator] = len(newNodes)-1
+            self.idIterator += 1
+        
+        for node in newNodes:
+            if self.mutationNonPublicScores:
+                node['otherScoresForMe'] = [{'score': 0, 'id': i['id']} for i in newNodes if i['id'] != node['id']]
+            else:
+                node['score'] = 0
+            
         self.nodes = newNodes
 
         # print('Size of new generation is {}'.format(len(self.nodes)))
@@ -259,7 +269,7 @@ class evolutionIndirectReciprocitySimulation:
 
     def reproduce_Social(self): # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
         interactionPairs = self.pickInteractionPairs(self.nodes, self.numInteractions)
-        beta = 10
+        beta = 0.01
         for pair in interactionPairs:
             mine = pair[0]
             partner = pair[1]
@@ -331,56 +341,75 @@ class evolutionIndirectReciprocitySimulation:
         # # print(self.nodes)
 
         # Strategy Distribution
-        if self.mutationMyScoreMatters:
-            vals = list(range(self.strategyLimits[0], self.strategyLimits[1]+1))
-            indexes = {val:it for it, val in enumerate(vals)}
-            freq = [[0 for _ in vals] for _ in vals]
+        if not self.saveOnlyFinalLogs:
+            if self.mutationMyScoreMatters:
+                vals = list(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+                indexes = {val:it for it, val in enumerate(vals)}
+                freq = [[0 for _ in vals] for _ in vals]
 
-            for node in self.nodes:
-                k = node['strategy']
-                h = node['strategySelf']
-                freq[indexes[k]][indexes[h]]+=1
+                for node in self.nodes:
+                    k = node['strategy']
+                    h = node['strategySelf']
+                    freq[indexes[k]][indexes[h]]+=1
 
-            x, y, z = [], [], []
-            for k in vals:
-                for h in vals:
-                    x.append(k)
-                    y.append(h)
-                    z.append(freq[indexes[k]][indexes[h]])
+                x, y, z = [], [], []
+                for k in vals:
+                    for h in vals:
+                        x.append(k)
+                        y.append(h)
+                        z.append(freq[indexes[k]][indexes[h]])
 
-            scaleSizes = [i*10 for i in z]
-            plt.scatter(x, y, s=scaleSizes, c="blue", alpha=0.4)
-            plt.grid()
-            plt.savefig(join(dir, 'strategyDistributionScatter - {}'.format(it)))
-            plt.close()
+                scaleSizes = [i*10 for i in z]
+                plt.scatter(x, y, s=scaleSizes, c="blue", alpha=0.4)
+                plt.grid()
+                plt.savefig(join(dir, 'strategyDistributionScatter - {}'.format(it)))
+                plt.close()
 
-        else:
-            strategies = [n['strategy'] for n in self.nodes]
-            plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
-            plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
-            plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
-            plt.close()
+            else:
+                strategies = [n['strategy'] for n in self.nodes]
+                plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
+                plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+                plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
+                plt.close()
 
         # Average Payoff
         payoffs = [n['payoff'] for n in self.nodes]
         avgPayoff = sum(payoffs)/len(payoffs)
 
-        return {'generation': it, 'avgPayoff': avgPayoff}
+        #Average Strategy
+        strategies = [n['strategy'] for n in self.nodes]
+        avgStrategy = sum(strategies)/len(strategies)
+
+        return {'generation': it, 'avgPayoff': avgPayoff, 'avgStrategy': avgStrategy}
 
     def finalLogs(self, logs):
         avgPayoff = [l['avgPayoff'] for l in logs]
         generationIt = [l['generation'] for l in logs]
+        avgStrategies = [l['avgStrategy'] for l in logs]
 
+        plt.figure()
         fig, ax = plt.subplots()
+        ax.set_ylabel('Average Payoff')
+        ax.set_xlabel('Generation')
         ax.plot(generationIt, avgPayoff)
-
-        # plt.ylabel(yAxes)
-        # ax.set_ylim(bottom=ymin)
-        # ax.set_ylim(top=ymax + ymax * 0.1)
-        # ax.legend()
-        # outputName = buildOutputName(x, ys, dir)
-
         plt.savefig(join(dir, 'AvgPayoff.png'))
+        
+        plt.figure()
+        fig, ax = plt.subplots()
+        ax.set_ylabel('Average Strategy')
+        ax.set_xlabel('Generation')
+        ax.plot(generationIt, avgStrategies)
+
+        plt.savefig(join(dir, 'AvgStrategy.png'))
+        
+        plt.figure()
+        strategies = [n['strategy'] for n in self.nodes]
+        ax.set_ylabel('Frequency')
+        ax.set_xlabel('Strategies')
+        plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
+        plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+        plt.savefig(join(dir, 'strategyDistribution - {}'.format('Final')))
+
         plt.close()
 
     def calculateInitialStrategies(self):
@@ -436,15 +465,15 @@ class evolutionIndirectReciprocitySimulation:
             print(node['payoff'])
 
     def casino(self, percentage):
-        return (random.random() < percentage);
+        return random.random() < percentage
 
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
-        'logFreq': 50,
+        'logFreq': 25,
         'numNodes': 100,
-        'numInteractions':  250,
-        'numGenerations': 1000,
+        'numInteractions':  300,
+        'numGenerations': 30000,
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
@@ -454,10 +483,16 @@ if __name__ == "__main__":
         'mutationNonPublicScores': False,
         'mutationMyScoreMatters': False,
         'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
-        'reproduce': 'social', # 'normal', 'moran' or 'social'
+        'reproduce': 'moran', # 'normal', 'moran' or 'social'
+        'saveOnlyFinalLogs': True,
     }
 
-    dir = 'output'
+    dir = "output-{}".format(time.asctime( time.localtime(time.time()))).replace(" ", "-")
+    os.makedirs(dir)
+
+    with open(dir+'/result.json', 'w') as fp:
+        json.dump(originalPaperValues, fp)
+
     sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
     sim.runSimulation()
-
+    
