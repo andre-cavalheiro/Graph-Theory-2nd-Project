@@ -87,7 +87,7 @@ class evolutionIndirectReciprocitySimulation:
 
     def runGeneration(self):
         if self.mutationPhysicalConstraints:
-            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes)
+            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes, self.nodePos)
             print('Running {} interactions...'.format(len(interactionPairs)))
         else:
             interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
@@ -279,7 +279,7 @@ class evolutionIndirectReciprocitySimulation:
 
     def reproduce_Social(self):    # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
         if self.mutationPhysicalConstraints:
-            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes)
+            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes, self.nodePos)
         else:
             interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
         beta = 10
@@ -390,7 +390,6 @@ class evolutionIndirectReciprocitySimulation:
 
         elif self.mutationMyScoreMatters:
             initialSelfStrategies = self.calculateInitialStrategies()
-
             for i in range(self.numNodes):
                 self.nodes.append({
                     'id': self.idIterator,
@@ -407,10 +406,12 @@ class evolutionIndirectReciprocitySimulation:
             if('avgDegree' in self.mutationPhysicalConstraintsParams.keys()):
                 self.populationGraph = MyGraph(self.numNodes, self.mutationPhysicalConstraintsParams['avgDegree'])  # fixme - make it a parameter
             elif(self.mutationPhysicalConstraintsParams['grid']):
-                self.populationGraph = createGrid(self.numNodes)
+                self.populationGraph = createGrid(self.mutationPhysicalConstraintsParams['sideSize'])
 
+            self.nodePos = list(self.populationGraph.nodes())
             for i in range(self.numNodes):
                 self.nodes.append({
+                    'pos': self.nodePos[i],
                     'id': self.idIterator,
                     'payoff': 0,
                     'score': 0,
@@ -449,7 +450,7 @@ if __name__ == "__main__":
         'mutationMyScoreMatters': False,
         'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
         'mutationPhysicalConstraints': True,
-        'mutationPhysicalConstraintsParams': {'grid': True},  # 'and' or 'or'
+        'mutationPhysicalConstraintsParams': {'sideSize':10, 'grid': True},  # 'and' or 'or'
         'reproduce': 'social',  # 'normal', 'moran' or 'social'
     }
 

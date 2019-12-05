@@ -22,11 +22,9 @@ class MyGraph(nx.Graph):
         return self.number_of_edges() * 2 / self.num_nodes
 
 
-def createGrid(nNodes):
-    G = grid_graph(dim=[int(nNodes/2), int(nNodes/2)])
-    breakpoint()
+def createGrid(n):
+    G = grid_graph(dim=[int(n), int(n)])
     return G
-
 
 def drawGraph(G, nodeInfo, dir, it):
 
@@ -49,16 +47,17 @@ def drawGraph(G, nodeInfo, dir, it):
     plt.savefig(join(dir, 'graph{}.png'.format(it)))
     plt.close()
 
-def getNeighborPairs(G, nodeInfo):
+def getNeighborPairs(G, nodeInfo, pos):
     pairs = []
     # The index of each node in nodeInfo corresponds
     # to the node with the same index in G.nodes
     # Get every neighbors for every node
     pairs = []
     for it, n in enumerate(nodeInfo):
-        neighbors = G.neighbors(it)
+        neighbors = G.neighbors(n['pos'])
         for neighbor in neighbors:
-            pairs.append([n, nodeInfo[neighbor]])
+            neighborIt = pos.index(neighbor)
+            pairs.append([n, nodeInfo[neighborIt]])
     random.shuffle(pairs)
     return pairs
 
