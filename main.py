@@ -5,6 +5,8 @@ from utils import *
 import random
 import matplotlib.pyplot as plt
 from os.path import join
+from os import mkdir
+import json
 
 class evolutionIndirectReciprocitySimulation:
 
@@ -12,8 +14,9 @@ class evolutionIndirectReciprocitySimulation:
 
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
-                 mutationNonPublicScores=False, mutationMyScoreMatters=False, logFreq=3, numObservers=10,
-                 mutationMyScoreMattersStrategy=None, reproduce='normal'):
+                 mutationNonPublicScores=False, mutationMyScoreMatters=False, mutationPhysicalConstraints=False,
+                 logFreq=3, numObservers=10, mutationMyScoreMattersStrategy=None, mutationPhysicalConstraintsParams=None,
+                 reproduce='normal'):
 
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
@@ -31,13 +34,21 @@ class evolutionIndirectReciprocitySimulation:
         self.mutationNonPublicScores = mutationNonPublicScores
         self.mutationMyScoreMatters = mutationMyScoreMatters
         self.mutationMyScoreMattersStrategy = mutationMyScoreMattersStrategy
+        self.mutationPhysicalConstraints = mutationPhysicalConstraints
+        self.mutationPhysicalConstraintsParams = mutationPhysicalConstraintsParams
         self.numObservers = numObservers
         self.reproduceMethod = reproduce
+        self.populationGraph = None
 
         assert(benefit > cost)
-        assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))    # Can't both be on
+        assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))        # Can't both be on
+        assert(not (mutationNonPublicScores == True and mutationPhysicalConstraints == True))    # Can't both be on
+        if mutationPhysicalConstraints:
+            assert(reproduce == 'social')
         if mutationMyScoreMatters:
             assert (mutationMyScoreMattersStrategy is not None)
+        if mutationRebelChild:
+            assert(reproduce != 'social')
 
         self.idIterator = 0
         self.idToIndex = {}     # id:index
@@ -48,12 +59,15 @@ class evolutionIndirectReciprocitySimulation:
         perGenLogs = []
         for i in range(self.numGenerations):
             print('-- Generation {} --'.format(i))
-            self.runGeneration()
-            if i%self.logFreq==0:
-                # print('== Logging {} =='.format(i))
+            lg = self.runGeneration()
+            lg['generation'] = i
 
+            l = None
+
+            if i%self.logFreq == 0:
+                # print('== Logging {} =='.format(i))
                 l = self.perGenLogs(i)
-                perGenLogs.append(l)
+
             if self.reproduceMethod == 'normal':
                 self.reproduce()
             elif self.reproduceMethod == 'moran':
@@ -64,15 +78,34 @@ class evolutionIndirectReciprocitySimulation:
                 print('Wrong reproduce method, check original values')
                 exit()
 
-        finalLogs(perGenLogs)
+            if l != None:
+                lg.update(l)
+
+            perGenLogs.append(lg)
+
+        finalLogs(perGenLogs, dir)
 
     def runGeneration(self):
-        interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
-        for pair in interactionPairs:
-            self.runInteraction(pair)
+        if self.mutationPhysicalConstraints:
+            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes)
+            print('Running {} interactions...'.format(len(interactionPairs)))
+        else:
+            interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
+
+        actions = []
+        for j, pair in enumerate(interactionPairs):
+            actions.append(self.runInteraction(pair))
+
+        actionFreq = countFreq(actions)
+        cooperationRatio = actionFreq['cooperate'] if 'cooperate' in actionFreq.keys() else 0
+
+        if not self.mutationNonPublicScores:
+            scores = [n['score'] for n in self.nodes]
+            avgScore = sum(scores)/len(scores)
+            return {'cooperationRatio': cooperationRatio, 'avgScore': avgScore}
 
         # # print(self.nodes)
-        return {}
+        return {'cooperationRatio': cooperationRatio}
 
     def runInteraction(self, pair):
         donor = pair[0]
@@ -91,7 +124,7 @@ class evolutionIndirectReciprocitySimulation:
 
         self.updateScoreAndPayoff(donor, recipient, action)
         donor['payoff'] += 0.1
-        return
+        return action
 
     def myScoreMattersInteraction(self, donor, recipientScore):
         firstCond = recipientScore > donor['strategy']      # In the paper they don't say "or equal to"
@@ -234,7 +267,7 @@ class evolutionIndirectReciprocitySimulation:
                     newNode['strategy'] = strat[n]
                 elif threshold[n-1] <= r < threshold[n]:
                     newNode['strategy'] = strat[n]
-            if self.mutation:
+            if self.mutationRebelChild:  # fixme - should also change h for mutation: 'my score matters'
                 if casino(0.001): # print('JACKPOT')
                     newNode['strategy'] = random.randrange(self.strategyLimits[0], self.strategyLimits[1] + 1)
 
@@ -244,8 +277,11 @@ class evolutionIndirectReciprocitySimulation:
         # print('Size of new generation is {}'.format(len(self.nodes)))
         # # print(self.nodes)
 
-    def reproduce_Social(self): # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
-        interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
+    def reproduce_Social(self):    # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
+        if self.mutationPhysicalConstraints:
+            interactionPairs = getNeighborPairs(self.populationGraph, self.nodes)
+        else:
+            interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
         beta = 10
         for pair in interactionPairs:
             mine = pair[0]
@@ -258,7 +294,7 @@ class evolutionIndirectReciprocitySimulation:
 
     def reset_scores(self):
         newNodes=[]
-        for i , node in enumerate(self.nodes):
+        for i, node in enumerate(self.nodes):
             newNode = node.copy()
             newNode['score'] = 0
             newNode['payoff'] = 0
@@ -316,14 +352,20 @@ class evolutionIndirectReciprocitySimulation:
             strategies = [n['strategy'] for n in self.nodes]
             plt.hist(x=strategies, bins=range(self.strategyLimits[0], self.strategyLimits[1]+1), align='left', alpha=0.8, rwidth=0.85)
             plt.xticks(range(self.strategyLimits[0], self.strategyLimits[1]+1))
+            plt.ylabel('Frequency')
+            plt.xlabel('Strategy')
+
             plt.savefig(join(dir, 'strategyDistribution - {}'.format(it)))
             plt.close()
+
+        if self.mutationPhysicalConstraints:
+            drawGraph(self.populationGraph, self.nodes, dir, it)
 
         # Average Payoff
         payoffs = [n['payoff'] for n in self.nodes]
         avgPayoff = sum(payoffs)/len(payoffs)
 
-        return {'generation': it, 'avgPayoff': avgPayoff}
+        return {'avgPayoff': avgPayoff}
 
     def calculateInitialStrategies(self):
         initialStrategies = [random.randrange(self.strategyLimits[0], self.strategyLimits[1]+1) for _ in range(self.numNodes)]
@@ -360,6 +402,22 @@ class evolutionIndirectReciprocitySimulation:
                 self.idToIndex[self.idIterator] = len(self.nodes) - 1
                 self.idIterator += 1
 
+        elif self.mutationPhysicalConstraints:
+
+            if('avgDegree' in self.mutationPhysicalConstraintsParams.keys()):
+                self.populationGraph = MyGraph(self.numNodes, self.mutationPhysicalConstraintsParams['avgDegree'])  # fixme - make it a parameter
+            elif(self.mutationPhysicalConstraintsParams['grid']):
+                self.populationGraph = createGrid(self.numNodes)
+
+            for i in range(self.numNodes):
+                self.nodes.append({
+                    'id': self.idIterator,
+                    'payoff': 0,
+                    'score': 0,
+                    'strategy': initialStrategies[i]
+                })
+                self.idToIndex[self.idIterator] = len(self.nodes)-1
+                self.idIterator += 1
         else:
             for i in range(self.numNodes):
                 self.nodes.append({
@@ -377,10 +435,10 @@ class evolutionIndirectReciprocitySimulation:
 if __name__ == "__main__":
     # Original paper values:
     originalPaperValues = {
-        'logFreq': 50,
+        'logFreq': 10,
         'numNodes': 100,
-        'numInteractions':  250,
-        'numGenerations': 1000,
+        'numInteractions':  125,
+        'numGenerations': 200,
         'initialScore': 0,
         'benefit': 1,
         'cost': 0.1,
@@ -390,10 +448,28 @@ if __name__ == "__main__":
         'mutationNonPublicScores': False,
         'mutationMyScoreMatters': False,
         'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
-        'reproduce': 'social', # 'normal', 'moran' or 'social'
+        'mutationPhysicalConstraints': True,
+        'mutationPhysicalConstraintsParams': {'grid': True},  # 'and' or 'or'
+        'reproduce': 'social',  # 'normal', 'moran' or 'social'
     }
 
-    dir = 'output'
-    sim = evolutionIndirectReciprocitySimulation(**originalPaperValues)
-    sim.runSimulation()
+    # fixme - warning! the social reproduction does not take into account rebel child mutation
+    changes = [{}]
+    '''changes = [
+               #{'numInteractions':  125,}, {'numInteractions':  400,},
+               {'numInteractions':  125, 'reproduce': 'moran'}, {'numInteractions':  300, 'reproduce': 'moran'},
+               # {'numInteractions':  125, 'reproduce': 'social'}, {'numInteractions':  400, 'reproduce': 'social'},
+               ]
+    '''
+
+    for j, c in enumerate(changes):
+        config = originalPaperValues.copy()
+        config.update(c)
+        dir = join('output', 'testrun{}'.format(j))
+        mkdir(dir)
+        sim = evolutionIndirectReciprocitySimulation(**config)
+        sim.runSimulation()
+
+        with open(join(dir, 'config.json'), 'w') as fp:
+            json.dump(config, fp)
 
