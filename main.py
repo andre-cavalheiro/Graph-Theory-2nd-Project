@@ -13,7 +13,7 @@ class evolutionIndirectReciprocitySimulation:
     def __init__(self, numNodes, numInteractions, numGenerations, initialScore=0,
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
                  mutationNonPublicScores=False, mutationMyScoreMatters=False, logFreq=3, numObservers=10,
-                 mutationMyScoreMattersStrategy=None, reproduce='normal'):
+                 mutationMyScoreMattersStrategy=None, reproduce='normal', numSocial=500):
 
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
@@ -33,6 +33,7 @@ class evolutionIndirectReciprocitySimulation:
         self.mutationMyScoreMattersStrategy = mutationMyScoreMattersStrategy
         self.numObservers = numObservers
         self.reproduceMethod = reproduce
+        self.numSocial=numSocial
 
         assert(benefit > cost)
         assert(not (mutationNonPublicScores == True and mutationMyScoreMatters == True))    # Can't both be on
@@ -61,7 +62,7 @@ class evolutionIndirectReciprocitySimulation:
             elif self.reproduceMethod == 'social':
                 self.reproduce_Social()
             else:
-                print('Wrong reproduce method, check original values')
+                print('Wrong reproduce method, check original values.')
                 exit()
 
         finalLogs(perGenLogs)
@@ -245,7 +246,7 @@ class evolutionIndirectReciprocitySimulation:
         # # print(self.nodes)
 
     def reproduce_Social(self): # social learning where nodes copy another node's strategy with a given probability if that node's payoff is better
-        interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
+        interactionPairs = pickInteractionPairs(self.nodes, self.numSocial)
         beta = 10
         for pair in interactionPairs:
             mine = pair[0]
@@ -391,6 +392,7 @@ if __name__ == "__main__":
         'mutationMyScoreMatters': False,
         'mutationMyScoreMattersStrategy': 'and',  # 'and' or 'or'
         'reproduce': 'social', # 'normal', 'moran' or 'social'
+        'numSocial': 500,
     }
 
     dir = 'output'
