@@ -16,7 +16,7 @@ class evolutionIndirectReciprocitySimulation:
                  benefit=1, cost=0.1, strategyLimits=[-5,6], scoreLimits=[-5,5], mutationRebelChild=False,
                  mutationNonPublicScores=False, mutationMyScoreMatters=False, mutationPhysicalConstraints=False,
                  logFreq=3, numObservers=10, mutationMyScoreMattersStrategy=None, mutationPhysicalConstraintsParams=None,
-                 reproduce='normal'):
+                 reproduce='normal', numSocial=500):
 
         # todo -> find out, Are costs and benefits updated during runtime? (original paper end of legend of fig 1)
         self.logFreq = logFreq
@@ -38,6 +38,7 @@ class evolutionIndirectReciprocitySimulation:
         self.mutationPhysicalConstraintsParams = mutationPhysicalConstraintsParams
         self.numObservers = numObservers
         self.reproduceMethod = reproduce
+        self.numSocial=numSocial
         self.populationGraph = None
 
         assert(benefit > cost)
@@ -75,7 +76,7 @@ class evolutionIndirectReciprocitySimulation:
             elif self.reproduceMethod == 'social':
                 self.reproduce_Social()
             else:
-                print('Wrong reproduce method, check original values')
+                print('Wrong reproduce method, check original values.')
                 exit()
 
             if l != None:
@@ -282,6 +283,7 @@ class evolutionIndirectReciprocitySimulation:
             interactionPairs = getNeighborPairs(self.populationGraph, self.nodes, self.nodePos)
         else:
             interactionPairs = pickInteractionPairs(self.nodes, self.numInteractions)
+
         beta = 10
         for pair in interactionPairs:
             mine = pair[0]
@@ -452,6 +454,7 @@ if __name__ == "__main__":
         'mutationPhysicalConstraints': True,
         'mutationPhysicalConstraintsParams': {'sideSize':10, 'grid': True},  # 'and' or 'or'
         'reproduce': 'social',  # 'normal', 'moran' or 'social'
+        'numSocial': 500,
     }
 
     # fixme - warning! the social reproduction does not take into account rebel child mutation
